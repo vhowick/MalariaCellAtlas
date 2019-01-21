@@ -5,7 +5,7 @@
 
 trim_alignment.pl - Perl script used to trim sequence alignments produced in the process of identifying promoter sequence families
 
-## Alignments of pir promoter sequence families
+## Alignments of pir upstream sequence families
 
 pir_heatmap_uig_clust_A.aln                                                                                                                         
 pir_heatmap_uig_clust_C.aln                                                                                                                        

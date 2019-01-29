@@ -1,0 +1,179 @@
+---
+title: "Assigning stages to circulation data"
+author: "Virginia Howick"
+date: "06/23/2018"
+output: html_document
+---
+
+Load packages and set wd
+```{r, message=FALSE}
+setwd("/Users/vh3/Documents/MCA/ANALYSIS_3")
+
+
+
+#load required packages
+require("Matrix")
+library(scater, quietly = TRUE)
+require("SingleCellExperiment")
+options(stringsAsFactors = FALSE)
+library(SC3)
+library(viridis)
+
+```
+
+
+Read in count and pheno data
+```{r}
+##Read in data from QCed expression matrices, make SCE object and subset life stages
+molecules <- read.table("/Users/vh3/Documents/MCA/forgithub/Expression_Matrices/Smartseq2/SS2_counts.csv", header = TRUE, sep = ",", row.names=1, stringsAsFactors = TRUE)
+anno <- read.delim("/Users/vh3/Documents/MCA/forgithub/Expression_Matrices/Smartseq2/SS2_pheno.csv", header = TRUE, sep = ",")
+
+
+cols <- c("bbSpz" = "navy", "EEF"="darkorange", "Merozoite"="lightpink", "oocyst"="steelblue", "ook" = "turquoise4", "ooSpz" = "lightskyblue", "Ring"="hotpink", "sgSpz"= "royalblue", "Schizont" = "violetred", "Male"="purple", "Female"="purple4", "ookoo" = "mediumturquoise", "Trophozoite"="violet")
+
+
+mca <- SingleCellExperiment(assays = list(
+  counts = as.matrix(molecules),
+  logcounts = log2(as.matrix(molecules) + 1)
+), colData = anno)
+
+
+
+```
+
+
+
+```{r}
+
+mcashz <- mca[, (colData(mca)$ShortenedLifeStage == "Shz")]
+
+
+```
+
+
+```{r}
+
+
+mca.shz.tmm <- scater::normaliseExprs(mcashz, method = "TMM")
+plotPCA(mca.shz.tmm, exprs_values = "logcounts", ntop = 500, colour_by = "PBANKA_0515000")
+plotPCA(mca.shz.tmm, exprs_values = "logcounts", ntop = 500, colour_by = "PBANKA_1212600")
+plotPCA(mca.shz.tmm, exprs_values = "logcounts", ntop = 500, colour_by = "PBANKA_0831000")
+
+rowData(mca.shz.tmm)$feature_symbol <- rownames(mca.shz.tmm)
+mca.shz.tmm2 <- sc3(mca.shz.tmm, ks = 4:6, biology = TRUE)
+#sc3_interactive(mca.shz.tmm2)
+p <- plotPCA(mca.shz.tmm2, exprs_values = "logcounts", ntop = 500, colour_by = "sc3_5_clusters")
+dat <- p$data
+  ggplot(dat, aes(PC1, PC2)) + 
+  geom_point(aes(colour=factor(colour_by))) + 
+  #labs(x="Dimension 1", y="Dimension 2") +
+scale_color_viridis(discrete=TRUE) +
+  theme_classic() + 
+  theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10), axis.text.x = element_blank(), axis.text.y = element_blank()) + guides(colour=guide_legend(title="Cluster"))
+
+cbPalette <- viridis(5)
+
+
+  
+  
+p <- plotPCA(mca.shz.tmm2, exprs_values = "logcounts", ntop = 500, shape_by = "sc3_5_clusters", colour_by = "PBANKA_1212600")
+
+dat <- p$data
+
+ggplot(dat, aes(PC1, PC2)) + 
+  geom_point(aes(colour=colour_by, shape=shape_by)) + 
+  labs(title="HAP2") +
+  scale_colour_viridis(option = "C") +
+  theme_classic() + 
+  theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_blank(), axis.text = element_text(size=10), axis.text.x = element_blank(), axis.text.y = element_blank(), plot.title = element_text(hjust = 0.5)) 
+
+p <- plotPCA(mca.shz.tmm2, exprs_values = "logcounts", ntop = 500, shape_by = "sc3_5_clusters", colour_by = "PBANKA_0515000")
+
+dat <- p$data
+
+ggplot(dat, aes(PC1, PC2)) + 
+  geom_point(aes(colour=colour_by, shape=shape_by)) + 
+  labs(title="Pbs25") +
+  scale_colour_viridis(option = "C") +
+  theme_classic() + 
+  theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_blank(), axis.text = element_text(size=10), axis.text.x = element_blank(), axis.text.y = element_blank(), plot.title = element_text(hjust = 0.5)) 
+  
+
+plotPCA(mca.shz.tmm2, exprs_values = "logcounts", ntop = 500, shape_by = "sc3_5_clusters", colour_by = "PBANKA_0831000")
+plotPCA(mca.shz.tmm2, exprs_values = "logcounts", ntop = 500, shape_by = "sc3_5_clusters", colour_by = "PBANKA_0932200")
+
+
+mca.asex <- mca.shz.tmm2[, (colData(mca.shz.tmm2)$ShortenedLifeStage2 == "Trophozoite") | (colData(mca.shz.tmm2)$ShortenedLifeStage2 == "Schizont")]
+# mca.asex <- mca.shz.tmm2[, (colData(mca.shz.tmm2)$sc3_5_clusters == "3") | (colData(mca.shz.tmm2)$sc3_5_clusters == "4") | (colData(mca.shz.tmm2)$sc3_5_clusters == "5")]
+# 
+# mca.sex <- mca.shz.tmm2[, (colData(mca.shz.tmm2)$sc3_5_clusters == "1") | (colData(mca.shz.tmm2)$sc3_5_clusters == "2")]
+# 
+# sexdata <- as.data.frame(colData(mca.sex))
+# sexdata$sc3_5_sex <- rep("Female", length(sexdata$sample_id))
+# sexdata$sc3_5_sex[which(sexdata$sc3_5_clusters == 2)] <- "Male"
+# 
+# sexdata <- droplevels(subset(sexdata, select=c("sample_id", "sc3_5_sex")))
+
+#write.csv(sexdata, file="Sexclassification_20180623.csv", quote = FALSE, row.names = FALSE)
+
+```
+
+
+```{r}
+#Prediction correlations with bulk data (asexual hoo):
+
+#Load in required package:
+library(Hmisc)
+#Cooerce expression data into a matrix and load in the reference timecourse data:
+xring <- as.matrix(counts(mca.asex))
+hoo <- as.matrix(read.table("/Users/vh3/Documents/MCA/ANALYSIS_3/hoo_berg2.txt",header=T, row.names=1))
+#Make a blank dataframe in which to add prediction:
+dfringr <- data.frame(matrix(ncol = 4, nrow = 0))
+colnames(dfringr) <- c("ID","Prediction","r (Pearson)")
+#Do correlations with bulk data using both Spearman and Pearson (and the top 1000 genes):
+for (i in 1:ncol(xring))
+{
+  shared <- intersect(row.names(as.matrix(head(sort(xring[, i], decreasing=TRUE), 1000))), rownames(hoo))
+  step0 <- rcorr(xring[shared, i], hoo[shared, 1:12], type = "spearman")
+  step1 <- as.matrix(t(step0$r[2:13, 1]))
+  step2 <- rcorr(xring[shared, i], hoo[shared, 1:12], type = "pearson")
+  step3 <- as.matrix(t(step2$r[2:13, 1]))
+  step4 <- cbind(colnames(step1)[which.max(step1)], step1[which.max(step1)], colnames(step3)[which.max(step3)], step3[which.max(step3)])
+  colnames(step4) <- c("Prediction(Spearman)", "r(Spearman)", "Prediction(Pearsons)", "r(Pearsons)")
+  rownames(step4) <- colnames(xring)[i]
+  dfringr <- rbind(dfringr, step4)
+}
+#Write out data into a csv file:
+#write.csv(dfringr,file="/Users/ar19/Desktop/PhD/AR04_GCSKO_project/All_mutants_Feb_2018/predictionpbcombined.csv")
+#Change the format of the output to make it more readable:
+#gsub("Pb_","", dfringr[,1]) - Make predictions into 18hr.dat format:
+dfringr[,1] <- gsub("Pb_","", dfringr[,1])
+#dfringr[,1] - check output
+#Remove hr.dat from list:
+dfringr[,1] <- gsub("hr.dat","", dfringr[,1])
+#Check - dfringr[,1]
+#Make into a number:
+dfringr[,1] <- as.numeric(dfringr[,1])
+#dfringr[,1]
+mca.asex$SpearmanPred <- dfringr[,1]
+dfringr[,2] <- as.numeric(as.character(dfringr[,2]))
+mca.asex$Spearman.r <- dfringr[,2]
+
+plotPCA(mca.asex, exprs_values = "logcounts", ntop = 500, colour_by = "SpearmanPred")
+plotPCA(mca.asex, exprs_values = "logcounts", ntop = 500, colour_by = "PBANKA_0831000")
+p <- plotPCA(mca.asex, exprs_values = "logcounts", ntop = 500, colour_by = "SpearmanPred", shape_by = "sc3_5_clusters")
+
+dat <- p$data
+
+ggplot(dat, aes(PC1, PC2)) + 
+  geom_point(aes(colour=colour_by, shape=shape_by)) + 
+  #labs(title="Pbs25") +
+  scale_colour_viridis(option = "C") +
+  theme_classic() + 
+  theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_blank(), axis.text = element_text(size=10), axis.text.x = element_blank(), axis.text.y = element_blank(), plot.title = element_text(hjust = 0.5)) + scale_shape_manual(values=c(15, 3, 7))
+  
+
+
+plotPCA(mca.asex, exprs_values = "logcounts", ntop = 500, colour_by = "SpearmanPred", shape_by = "sc3_5_clusters", size_by = "PBANKA_1102200")
+```
+

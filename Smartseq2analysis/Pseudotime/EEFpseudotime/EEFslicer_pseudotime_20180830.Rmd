@@ -1,0 +1,175 @@
+---
+title: "EEF Pseudotime"
+author: "Virginia Howick"
+date: "30/08/2018"
+output: html_document
+---
+
+```{r, message=FALSE}
+setwd("/Users/vh3/Documents/MCA/ANALYSIS_3")
+library(ggthemes)
+library(ggbeeswarm)
+library(TSCAN)
+library(destiny)
+library(reshape2)
+library(plyr)
+library(ggplot2)
+library(devtools)
+library(scater)
+library(SLICER)
+library("lle")
+library(pheatmap)
+library(monocle)
+library(viridis)
+```
+
+```{r}
+mca.qc.tmm <- readRDS("MCAqcTMM_20180625.rds")
+
+
+cols <- c("bbSpz" = "navy", "EEF"="darkorange", "Merozoite"="lightpink", "oocyst"="steelblue", "ook" = "turquoise4", "ooSpz" = "lightskyblue", "Ring"="hotpink", "sgSpz"= "royalblue", "Shz" = "violet", "male"="purple", "female"="purple4", "ookoo" = "mediumturquoise")
+
+```
+
+
+```{r}
+mca.qc.eef <- mca.qc.tmm[, (colData(mca.qc.tmm)$ShortenedLifeStage2 == "EEF")]
+
+
+eef <- logcounts(mca.qc.eef)
+colnames(eef) <- mca.qc.eef$sample_id
+#ookoo <- ookoo[!duplicated(ookoo), ]
+teef <- t(eef)
+teef <- teef[!duplicated(teef), ]
+cellLabels <- mca.qc.eef$ShortenedLifeStage2
+slicer_genes <- select_genes(teef)
+
+
+k <- select_k(t(eef[slicer_genes,]), kmin = 30, kmax=60)
+
+slicer_traj_lle <- lle(t(eef[slicer_genes, ]), m = 2, k)$Y
+
+
+reducedDim(mca.qc.eef, "LLE") <- slicer_traj_lle
+plotReducedDim(mca.qc.eef, use_dimred = "LLE", colour_by = "ShortenedLifeStage2") +
+  xlab("LLE component 1") + ylab("LLE component 2") +
+  ggtitle("Locally linear embedding of cells from SLICER")
+
+slicer_traj_graph <- conn_knn_graph(slicer_traj_lle, 10)
+plot(slicer_traj_graph, main = "Fully connected kNN graph from SLICER")
+ends <- find_extreme_cells(slicer_traj_graph, slicer_traj_lle)
+start <- ends[1]
+
+
+pseudotime_order_slicer <- cell_order(slicer_traj_graph, start)
+branches <- assign_branches(slicer_traj_graph, start)
+
+pseudotime_slicer2 <-
+  data.frame(
+    Timepoint = cellLabels,
+    pseudotime = NA,
+    State = branches,
+    sample_id = mca.qc.eef$sample_id)
+
+pseudotime_slicer2$pseudotime[pseudotime_order_slicer] <-
+  1:length(pseudotime_order_slicer)
+
+
+order.slicer2 <- pseudotime_slicer2[order(pseudotime_slicer2$pseudotime), ]
+revpseudotime <- rev(order.slicer2$pseudotime)
+order.slicer2$pseudotime <- revpseudotime
+order.slicer2 <- order.slicer2[order(as.numeric(rownames(order.slicer2))), ]
+
+pseudotime_slicer2 <- order.slicer2
+
+mca.qc.eef$pseudotime_slicer2 <- pseudotime_slicer2$pseudotime
+
+ggplot(as.data.frame(colData(mca.qc.eef)), 
+       aes(x = pseudotime_slicer2, 
+           y = ShortenedLifeStage2, colour = ShortenedLifeStage2)) +
+  geom_quasirandom(groupOnX = FALSE) +
+  scale_color_tableau() + theme_classic() +
+  xlab("SLICER pseudotime (cell ordering)") +
+  ylab("Timepoint") +
+  theme_classic()
+
+
+plotPCA(mca.qc.eef, colour_by = "pseudotime_slicer2", shape_by="ShortenedLifeStage", exprs_values = "logcounts", ntop = 500)+ theme(axis.title=element_text(size=12), legend.text = element_text(size = 12), legend.title = element_text(size = 12), axis.text = element_text(size=12))
+
+#write.csv(colData(mca.qc.eef), file="Liverpheno_Pseudotime_20180525.csv")
+#eefcounts <- counts(mca.qc.eef)
+#eeflogcounts <- logcounts(mca.qc.eef)
+#write.csv(eefcounts, file = "eefCounts_20180525.csv")
+
+#eefslicer <- as.data.frame(cbind(mca.qc.eef$sample_id, mca.qc.eef$pseudotime_slicer2))
+#colnames(eefslicer) <- c("sample_id", "pseudotime_slicer2")
+#eefslicer$pseudotime_slicer2 <- as.numeric(eefslicer$pseudotime_slicer2)
+#write.csv(eefslicer, file="eef_pseudotime_slicer_20180524.csv")
+
+```
+
+```{r}
+slicergenenames <- rownames(eef[slicer_genes, ])
+#write.csv(as.data.frame(slicergenenames), "eefslicergenenames.csv")
+
+expmatrix <- as.matrix(log2(normcounts(mca.qc.eef) + 1))
+subexpmatrix <- expmatrix[which(rownames(expmatrix) %in% slicergenenames), ]
+subexpmatrix <- subexpmatrix[!duplicated(rownames(subexpmatrix)), ]
+pheno <- as.data.frame(mca.qc.eef@colData@listData)
+
+
+rownames(pheno) <- pheno$sample_id
+
+pd <- new("AnnotatedDataFrame", data = pheno)
+
+meef <- newCellDataSet(subexpmatrix, phenoData = pd, expressionFamily = negbinomial.size())
+
+meef <- estimateSizeFactors(meef)
+meef <- estimateDispersions(meef)
+
+
+res <- differentialGeneTest(meef, fullModelFormulaStr = "~pseudotime_slicer2")
+
+order.pop <- order(res$pval)
+a <- res[order.pop,]
+b <-rownames(a[1:10,])
+sub <- res[res$qval < 0.00001, ]
+dim(sub)
+
+siggenes <- rownames(sub)
+write.csv(siggenes, file="pseudotimeDE_EEFsiggene105_20180830.csv")
+```
+
+
+```{r}
+##subset row data and then subset your single cell object so you just have genes of interest
+keepsig <- rowData(mca.qc.eef)$feature_symbol %in% siggenes
+obj <- mca.qc.eef[keepsig, ]
+
+
+
+counts <- counts(mca.qc.tmm)
+#write.csv(counts, file = "/Volumes/team222_unix/ar19/countsmcaqctmm.csv")
+
+
+#set the order of stages
+ord <- obj[, order(obj$pseudotime_slicer2)]
+
+ordexp <- logcounts(ord)
+
+celldata <- colData(ord)
+
+
+
+pheatmap(ordexp, cluster_cols=FALSE,cluster_rows=TRUE ,  
+        show_colnames = FALSE, show_rownames = FALSE, color=inferno(10))
+
+ap2s <- read.csv("/Users/vh3/Documents/MCA/ANALYSIS_2/Ap2s.csv", header=FALSE)
+
+keepap2 <- rownames(ordexp) %in% ap2s$V1
+ap2obj <- ordexp[keepap2, ]
+
+pheatmap(ap2obj, cluster_cols=FALSE,cluster_rows=TRUE ,  
+        show_colnames = FALSE, show_rownames = TRUE, color=inferno(10))
+```
+

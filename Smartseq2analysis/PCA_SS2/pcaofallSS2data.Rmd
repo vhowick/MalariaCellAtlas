@@ -1,0 +1,97 @@
+---
+title: "PCA of Smart-seq2 data"
+output:
+  html_document:
+    df_print: paged
+---
+
+set wd and install packages
+```{r, message=FALSE}
+setwd("/Users/vh3/Documents/MCA/ANALYSIS_3")
+
+#load required packages
+require("Matrix")
+library(scater, quietly = TRUE)
+require("SingleCellExperiment")
+options(stringsAsFactors = FALSE)
+library(plotly)
+library(devtools)
+```
+
+read in data, normalize two ways and look at PCAs
+```{r}
+molecules <- read.table("/Users/vh3/Documents/MCA/forgithub/Expression_Matrices/Smartseq2/SS2_counts.csv", header = TRUE, sep = ",", row.names=1, stringsAsFactors = TRUE)
+anno <- read.delim("/Users/vh3/Documents/MCA/forgithub/Expression_Matrices/Smartseq2/SS2_pheno.csv", header = TRUE, sep = ",")
+
+
+cols <- c("bbSpz" = "navy", "EEF"="darkorange", "Merozoite"="lightpink", "oocyst"="steelblue", "ook" = "turquoise4", "ooSpz" = "lightskyblue", "Ring"="hotpink", "sgSpz"= "royalblue", "Schizont" = "violetred", "Male"="purple", "Female"="purple4", "ookoo" = "mediumturquoise", "Trophozoite"="violet")
+
+
+mca.qc <- SingleCellExperiment(assays = list(
+  counts = as.matrix(molecules),
+  logcounts = log2(as.matrix(molecules) + 1)
+), colData = anno)
+
+
+mca.qc.ookoo <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage == "ook") | (colData(mca.qc)$ShortenedLifeStage == "ookoo") | (colData(mca.qc)$ShortenedLifeStage == "oocyst")]
+mca.qc.eef <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage == "EEF")]
+mca.qc.spz <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage == "bbSpz") | 
+                          (colData(mca.qc)$ShortenedLifeStage == "sgSpz") |
+                          (colData(mca.qc)$ShortenedLifeStage == "ooSpz")]
+mca.qc.idc <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage == "Merozoite") | 
+                       (colData(mca.qc)$ShortenedLifeStage == "Ring") |
+                       (colData(mca.qc)$ShortenedLifeStage2 == "Schizont") | 
+                       (colData(mca.qc)$ShortenedLifeStage2 == "Trophozoite")]
+mca.qc.sex <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage2 == "Male") | (colData(mca.qc)$ShortenedLifeStage2 == "Female")]
+
+
+mca.qc.ookoo.tmm <- scater::normaliseExprs(mca.qc.ookoo, method = "TMM")
+#mca.qc.ooc.tmm <- scater::normaliseExprs(mca.qc.ooc, method = "TMM")
+mca.qc.eef.tmm <- scater::normaliseExprs(mca.qc.eef, method = "TMM")
+mca.qc.spz.tmm <- scater::normaliseExprs(mca.qc.spz, method = "TMM")
+mca.qc.idc.tmm <- scater::normaliseExprs(mca.qc.idc, method = "TMM")
+mca.qc.sex.tmm <- scater::normaliseExprs(mca.qc.sex, method = "TMM")
+
+mca.qc.tmm <- cbind(mca.qc.ookoo.tmm, mca.qc.eef.tmm)
+#mca.qc.tmm <- cbind(mca.qc.tmm, mca.qc.eef.tmm)
+mca.qc.tmm <- cbind(mca.qc.tmm, mca.qc.spz.tmm)
+mca.qc.tmm <- cbind(mca.qc.tmm, mca.qc.idc.tmm)
+mca.qc.tmm <- cbind(mca.qc.tmm, mca.qc.sex.tmm)
+
+pca <- plotPCA(mca.qc.tmm, colour_by = "ShortenedLifeStage2", ntop=50, exprs_values="logcounts")
+pcatab <- pca$data
+ggplot(pcatab, aes(PC1, PC2)) + geom_point(aes(colour=factor(colour_by))) + scale_color_manual(values = cols) + theme_classic()
+
+###This is what the PCA is from in FIG 1
+mca.qc.tmmall <- scater::normaliseExprs(mca.qc, method = "TMM")
+pca <- plotPCA(mca.qc.tmmall, colour_by = "ShortenedLifeStage2", exprs_values = "logcounts", ntop = 50)
+pcatab <- pca$data
+ggplot(pcatab, aes(PC1, PC2)) + geom_point(aes(colour=factor(colour_by))) + scale_color_manual(values = cols) + theme_classic()
+
+pca <- plotPCA(mca.qc.tmmall, exprs_values = "logcounts", ntop = 50, colour_by = "ShortenedLifeStage2", ncomp=3)
+dat <- pca$data
+ggplot(dat, aes(PC1, PC2)) + geom_point(aes(colour=factor(colour_by))) + scale_color_manual(values = cols) + theme_classic()
+ggplot(dat, aes(PC2, PC3)) + geom_point(aes(colour=factor(colour_by))) + scale_color_manual(values = cols) + theme_classic()
+ggplot(dat, aes(PC1, PC3)) + geom_point(aes(colour=factor(colour_by))) + scale_color_manual(values = cols) + theme_classic()
+
+plot_ly(dat, 
+        x           = ~PC1, 
+        y           = ~PC2, 
+        z           = ~PC3,
+        type        = 'scatter3d', 
+        mode        = 'markers',
+         #hoverinfo   = "text",
+        #text       = ~paste0(gene_id, " ", gene_name),
+        color      = ~colour_by,
+        colors     = c("bbSpz" = "navy", "EEF"="darkorange", "Merozoite"="lightpink", "oocyst"="steelblue", "ook" = "turquoise4", "ooSpz" = "lightskyblue", "Ring"="hotpink", "sgSpz"= "royalblue", "Schizont" = "violetred", "Male"="purple", "Female"="purple4", "ookoo" = "mediumturquoise", "Trophozoite"="violet"),
+        marker      = list(size = 3)
+)
+
+```
+
+session info
+
+```{r}
+session_info()
+```
+

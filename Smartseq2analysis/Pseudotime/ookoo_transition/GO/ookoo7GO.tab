@@ -1,0 +1,4 @@
+ID	Name	Bgd count	Result count	Result gene list	Pct of bgd	Fold enrichment	Odds ratio	P-value	Benjamini	Bonferroni
+GO:0006412	translation	211	3	PBANKA_0510900,PBANKA_1346700,PBANKA_1456900,	1.4	4.43	6.22	0.0251283729486	0.234453843828	1.0
+GO:0015988	energy coupled proton transmembrane transport, against electrochemical gradient	14	1	PBANKA_1234000,	7.1	22.25	26.75	0.0441104584961	0.234453843828	1.0
+GO:0015991	ATP hydrolysis coupled proton transport	14	1	PBANKA_1234000,	7.1	22.25	26.75	0.0441104584961	0.234453843828	1.0

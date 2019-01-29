@@ -1,0 +1,263 @@
+---
+title: "Pseudotime"
+author: "Virginia Howick"
+date: "03/07/2018"
+output: html_document
+---
+
+```{r, message=FALSE}
+setwd("/Users/vh3/Documents/MCA/ANALYSIS_3")
+library(ggthemes)
+library(ggbeeswarm)
+library(reshape2)
+library(plyr)
+library(ggplot2)
+library(devtools)
+library(monocle)
+library(M3Drop)
+library(scater)
+library(SLICER)
+library("lle")
+library(pheatmap)
+library(RColorBrewer)
+library(viridis)
+
+cols <- c("bbSpz" = "navy", "EEF"="darkorange", "Merozoite"="lightpink", "oocyst"="steelblue", "ook" = "turquoise4", "Ring"="hotpink", "sgSpz"= "royalblue", "Schizont" = "violet", "Male"="purple", "Female"="purple4", "ookoo" = "mediumturquoise", "Trophozoite"="violet")
+
+```
+
+
+Add in the information on ookoo clusters. Subset and normalize the ookoo data
+```{r}
+mca.qc <- readRDS("mca.qc_20180625.rds")
+
+ookoo <- read.csv("/Users/vh3/Documents/MCA/ANALYSIS_2/OokooInfo_5clusts_20180516.csv", header = TRUE, row.names = 1)
+
+co <- merge(colData(mca.qc), ookoo, by="sample_id", all.x=TRUE, all.y=FALSE)
+subco <- cbind(co$sample_id, co$SC3_5_clust, co$ookoo)
+subco <- as.data.frame(subco)
+colnames(subco) <- c("sample_id", "SC3_5_clust", "ookoo")
+
+cellnames <- mca.qc$sample_id
+subco <- subco[match(cellnames, subco$sample_id), ]
+
+mca.qc$SC3_5_clust <- subco$SC3_5_clust
+mca.qc$ookoo <- subco$ookoo
+
+mca.qc.ookoo <- mca.qc[, (colData(mca.qc)$ShortenedLifeStage == "ook") | 
+                         (colData(mca.qc)$ShortenedLifeStage == "ookoo") |
+                         colData(mca.qc)$ShortenedLifeStage == "oocyst"]
+mc.qc.ookootmm <- scater::normaliseExprs(mca.qc.ookoo, method = "TMM")
+plotPCA(mc.qc.ookootmm, colour_by="ookoo")
+
+
+assay(mc.qc.ookootmm, "logcounts_norm") <- log2(normcounts(mc.qc.ookootmm) + 1)
+
+
+```
+
+Pseudotime with SLICER
+```{r}
+
+ookoo <- log2(normcounts(mc.qc.ookootmm) + 1 )
+
+
+colnames(ookoo) <- mc.qc.ookootmm$sample_id
+#ookoo <- ookoo[!duplicated(ookoo), ]
+tookoo <- t(ookoo)
+tookoo <- tookoo[!duplicated(tookoo), ]
+cellLabels <- mc.qc.ookootmm$ShortenedLifeStage2
+slicer_genes <- select_genes(tookoo)
+
+
+k <- select_k(t(ookoo[slicer_genes,]), kmin = 30, kmax=60)
+
+slicer_traj_lle <- lle(t(ookoo[slicer_genes, ]), m = 2, k)$Y
+
+
+reducedDim(mc.qc.ookootmm, "LLE") <- slicer_traj_lle
+plotReducedDim(mc.qc.ookootmm, use_dimred = "LLE", colour_by = "ShortenedLifeStage2") +
+  xlab("LLE component 1") + ylab("LLE component 2") +
+  ggtitle("Locally linear embedding of cells from SLICER")
+
+slicer_traj_graph <- conn_knn_graph(slicer_traj_lle, 10)
+plot(slicer_traj_graph, main = "Fully connected kNN graph from SLICER")
+ends <- find_extreme_cells(slicer_traj_graph, slicer_traj_lle)
+start <- ends[1]
+
+
+pseudotime_order_slicer <- cell_order(slicer_traj_graph, start)
+branches <- assign_branches(slicer_traj_graph, start)
+
+pseudotime_slicer2 <-
+  data.frame(
+    Timepoint = cellLabels,
+    pseudotime = NA,
+    State = branches,
+    sample_id = mc.qc.ookootmm$sample_id)
+
+pseudotime_slicer2$pseudotime[pseudotime_order_slicer] <-
+  1:length(pseudotime_order_slicer)
+mc.qc.ookootmm$pseudotime_slicer2 <- pseudotime_slicer2$pseudotime
+
+ookooslicer <- as.data.frame(cbind(mc.qc.ookootmm$sample_id, mc.qc.ookootmm$pseudotime_slicer2))
+colnames(ookooslicer) <- c("sample_id", "pseudotime_slicer2")
+ookooslicer$pseudotime_slicer2 <- as.numeric(ookooslicer$pseudotime_slicer2)     
+
+#write.csv(ookooslicer, file="ookoo_pseudotime_Slicer_20180524")
+
+ggplot(as.data.frame(colData(mc.qc.ookootmm)), 
+       aes(x = pseudotime_slicer2, 
+           y = ShortenedLifeStage2, colour = ShortenedLifeStage2)) +
+  geom_quasirandom(groupOnX = FALSE) +
+  scale_color_tableau() + theme_classic() +
+  xlab("SLICER pseudotime (cell ordering)") +
+  ylab("Timepoint") +
+  theme_classic()
+
+pl <- plotPCA(mc.qc.ookootmm, colour_by = "pseudotime_slicer2", shape_by="ShortenedLifeStage", exprs_values = "logcounts", ntop = 500)+ theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 12), axis.text = element_text(size=12)) + scale_shape_discrete(name="Stage", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst"))
+
+dat <- pl$data
+
+ggplot(dat, aes(PC1, PC2)) + geom_point(aes(colour=colour_by, shape=shape_by)) + scale_color_viridis(option = "C") +
+                           theme_classic()+ theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10)) + scale_shape_discrete(name="colour_by", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst")) + labs(x= "Component 1: 50% variance", y= "Component 2: 10% variance")
+
+
+pl <- plotPCA(mc.qc.ookootmm, colour_by = "ShortenedLifeStage", shape_by="ShortenedLifeStage", exprs_values = "logcounts", ntop = 500) + theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10)) + scale_shape_discrete(name="Stage", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst"))
+dat <- pl$data
+
+ggplot(dat, aes(PC1, PC2)) + geom_point(aes(colour=factor(colour_by), shape=colour_by)) + scale_color_manual(values = cols, breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst")) + theme_classic()+ theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10)) + scale_shape_discrete(name="colour_by", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst")) + labs(x= "Component 1: 50% variance", y= "Component 2: 10% variance")
+
+cols <- c("oocyst"="royalblue", "ook"="turquoise4", "ookoo"="turquoise")
+
+
+###AP2O
+plotExpression(mc.qc.ookootmm, "PBANKA_0905900", x = "pseudotime_slicer2", 
+               colour_by = "ShortenedLifeStage2", show_violin = FALSE,
+               show_smooth = TRUE)+ labs(x="Pseudotime") + theme(axis.title=element_text(size=12), legend.text = element_text(size = 12), axis.text = element_text(size=12)) +  scale_color_manual(values = cols) + scale_shape_discrete(name  ="Stage",
+                          breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst"))
+
+##SOAP
+plotExpression(mc.qc.ookootmm, "PBANKA_1037800", x = "pseudotime_slicer2", 
+               colour_by = "ShortenedLifeStage2", show_violin = FALSE,
+               show_smooth = TRUE)+ labs(x="Pseudotime") + theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10)) +  scale_color_manual(values = cols, name="Stage", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst")) 
+
+##ACTIN II
+plotExpression(mc.qc.ookootmm, "PBANKA_1030100", x = "pseudotime_slicer2", 
+               colour_by = "ShortenedLifeStage2", show_violin = FALSE,
+               show_smooth = TRUE)+ labs(x="Pseudotime") + theme(axis.title=element_text(size=10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), axis.text = element_text(size=10)) +  scale_color_manual(values = cols, name="Stage", breaks=c("ook", "ookoo", "oocyst"),
+                          labels=c("Bolus Ookinete", "Ookinete/Oocyst", "Oocyst")) 
+
+slicergenenames <- rownames(ookoo[slicer_genes, ])
+```
+
+
+
+DE with SLICER in Monocle
+```{r}
+expmatrix <- as.matrix(log2(normcounts(mc.qc.ookootmm) + 1 )) 
+subexpmatrix <- expmatrix[which(rownames(expmatrix) %in% slicergenenames), ]
+subexpmatrix <- subexpmatrix[!duplicated(rownames(subexpmatrix)), ]
+pheno <- as.data.frame(mc.qc.ookootmm@colData@listData)
+
+
+rownames(pheno) <- pheno$sample_id
+
+pd <- new("AnnotatedDataFrame", data = pheno)
+
+mookoo <- newCellDataSet(subexpmatrix, phenoData = pd, expressionFamily = negbinomial.size())
+
+mookoo <- estimateSizeFactors(mookoo)
+mookoo <- estimateDispersions(mookoo)
+res <- differentialGeneTest(mookoo, fullModelFormulaStr = "~pseudotime_slicer2")
+
+order.pop <- order(res$pval)
+a <- res[order.pop,]
+b <-rownames(a[1:10,])
+sub <- res[res$qval < 0.00001, ]
+dim(sub)
+write.csv(sub, file="ookoodeslicer_20180830.csv")
+
+
+
+
+
+```
+
+
+```{r}
+
+
+##list of very sig genes
+siggenes <- rownames(sub)
+
+##subset row data and then subset your single cell object so you just have genes of interest
+
+keepsig <- rowData(mc.qc.ookootmm)$feature_symbol %in% siggenes
+obj <- mc.qc.ookootmm[keepsig, ]
+
+
+
+
+
+#set the order of stages
+ord <- obj[, order(obj$pseudotime_slicer2)]
+
+ordexp <- logcounts(ord)
+
+celldata <- colData(ord)
+
+stage <- as.data.frame(celldata$ShortenedLifeStage2)
+row.names(stage) <- colnames(ordexp)
+colnames(stage) <- "stage"
+
+clust <- as.data.frame(celldata$SC3_5_clust)
+row.names(clust) <- colnames(ordexp)
+colnames(clust) <- "clust"
+
+
+
+test <- pheatmap(ordexp, cluster_cols=FALSE,cluster_rows=TRUE ,  
+         annotation_col=clust, show_colnames = FALSE, show_rownames = TRUE, color=inferno(10), silent = TRUE)
+
+
+
+cuts <- as.data.frame(cutree(test$tree_row, k = 16))
+colnames(cuts) <- "k16clusts"
+
+
+map <- pheatmap(ordexp, cluster_cols=FALSE,cluster_rows=TRUE ,  
+         annotation_row=cuts, show_colnames = FALSE, show_rownames = FALSE, color=inferno(10), cutree_rows = 16, annotation_names_row = TRUE, fontsize_row= 5)
+
+map.clust <- cbind(ordexp, 
+                      cluster = cutree(map$tree_row, 
+                                       k = 16))
+map.clust <- as.data.frame(map.clust)
+
+clustmean <- aggregate(map.clust[, 1:393], by= list(as.factor(map.clust$cluster)), mean)
+
+subclustmean <- clustmean[, 2:394]
+rownames(subclustmean) <- clustmean$Group.1
+
+stage_col <- c(oocyst="steelblue", ook = "turquoise4", ookoo = "mediumturquoise")
+
+ann_c <- list(
+  stage = stage_col
+  )
+
+pheatmap(subclustmean, cluster_cols=FALSE,cluster_rows=TRUE ,  annotation_col = stage,
+         show_colnames = FALSE, show_rownames = TRUE, color=inferno(10), annotation_colors = ann_c)
+
+write.csv(map.clust, file="log2normcounts_map.clust_20180830.csv")
+
+
+
+```
+

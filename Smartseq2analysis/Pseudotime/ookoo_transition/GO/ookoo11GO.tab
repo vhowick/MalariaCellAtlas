@@ -1,0 +1,16 @@
+ID	Name	Bgd count	Result count	Result gene list	Pct of bgd	Fold enrichment	Odds ratio	P-value	Benjamini	Bonferroni
+GO:0007113	endomitotic cell cycle	1	1	PBANKA_1233200,	100.0	133.52	inf	0.00748930099859	0.213216632067	0.748930099859
+GO:0006424	glutamyl-tRNA aminoacylation	2	1	PBANKA_1362000,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0043549	regulation of kinase activity	2	1	PBANKA_1233200,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0000079	regulation of cyclin-dependent protein serine/threonine kinase activity	2	1	PBANKA_1233200,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0045859	regulation of protein kinase activity	2	1	PBANKA_1233200,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0071900	regulation of protein serine/threonine kinase activity	2	1	PBANKA_1233200,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0051338	regulation of transferase activity	2	1	PBANKA_1233200,	50.0	66.76	139.1	0.0149251642447	0.213216632067	1.0
+GO:0016925	protein sumoylation	3	1	PBANKA_0904500,	33.3	44.51	69.53	0.022307952093	0.246104929234	1.0
+GO:0042325	regulation of phosphorylation	4	1	PBANKA_1233200,	25.0	33.38	46.33	0.0296380245694	0.246104929234	1.0
+GO:0001932	regulation of protein phosphorylation	4	1	PBANKA_1233200,	25.0	33.38	46.33	0.0296380245694	0.246104929234	1.0
+GO:0018202	peptidyl-histidine modification	5	1	PBANKA_1015200,	20.0	26.7	34.74	0.036915739385	0.246104929234	1.0
+GO:0017183	peptidyl-diphthamide biosynthetic process from peptidyl-histidine	5	1	PBANKA_1015200,	20.0	26.7	34.74	0.036915739385	0.246104929234	1.0
+GO:0017182	peptidyl-diphthamide metabolic process	5	1	PBANKA_1015200,	20.0	26.7	34.74	0.036915739385	0.246104929234	1.0
+GO:0051726	regulation of cell cycle	5	1	PBANKA_1233200,	20.0	26.7	34.74	0.036915739385	0.246104929234	1.0
+GO:0031399	regulation of protein modification process	5	1	PBANKA_1233200,	20.0	26.7	34.74	0.036915739385	0.246104929234	1.0

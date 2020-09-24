@@ -1,4 +1,4 @@
 # Malaria Cell Atlas github
 
-Data and code associated with https://www.biorxiv.org/content/10.1101/527556v1
+Data and code associated with https://science.sciencemag.org/content/365/6455/eaaw2619
 
